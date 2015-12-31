@@ -1,13 +1,11 @@
-# README
-## This is the README for your extension "tsfmt" 
-You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
+# tsformatter
 
-* Split the editor (`Cmd+\` on OSX or `Ctrl+\` on Windows and Linux)
-* Toggle preview (`Shift+CMD+V` on OSX or `Shift+Ctrl+V` on Windows and Linux)
-* Press `Ctrl+Space` (Windows, Linux) or `Cmd+Space` (OSX) to see a list of Markdown snippets
+A small VSCode extension that formats TypeScript files using tsfmt. To install the extension, run the following commands:
 
-### For more information
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+```bash
+npm install -g vscode
+```
 
-** Enjoy!**
+```bash
+code tsformatter-0.0.1.vsix
+```
