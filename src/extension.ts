@@ -3,58 +3,126 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from "path";
+import * as tsfmt from "typescript-formatter";
+import * as Bluebird from "bluebird";
+import * as fs from "fs";
+import {merge} from "lodash";
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) { 
+export function activate(context: vscode.ExtensionContext)
+{ 
     // The command has been defined in the package.json file
     // Now provide the implementation of the command with  registerCommand
     // The commandId parameter must match the command field in package.json
-    var disposable = vscode.commands.registerCommand('tsformatter.format', (args) => {
+    var disposable = vscode.commands.registerCommand('tsformatter.format', (args) =>
+    {
         // The code you place here will be executed every time your command is executed        
-        let editor = vscode.window.activeTextEditor;
+        const editor = vscode.window.activeTextEditor;
+        const filename = editor.document.fileName;
+        const hasUnsavedEdits = editor.document.isDirty;
 
-        if (!editor) {
+        if (!editor || !vscode.workspace.rootPath)
+        {
             return;
         }
 
-        if (args.context.editorLangId !== "typescript") {
+        if (args.context.editorLangId !== "typescript")
+        {
             vscode.commands.executeCommand("editor.action.format");
 
             return;
         }
-        
-        let projectPath = vscode.workspace.rootPath;
-        let filepath = editor.document.fileName;
-        let channel = vscode.window.createOutputChannel("TypeScript Formatter");
-        
-        // TODO: Build default config with --stdin option https://github.com/vvakame/typescript-formatter
 
-        //Warning: The tsfmt CLI doesn't accept quotes in filepath. Quotes are omitted in the next line on purpose.
-        let exec = cp.exec(`echo 'Formatting TS file at ${filepath}.' && tsfmt ${filepath} -r`, { cwd: projectPath, env: process.env }, (error) => {
-            if(!error){
-                channel.hide();
-                
+        const format = (saved: boolean) => 
+        {
+            if (!saved && hasUnsavedEdits)
+            {
+                vscode.window.showErrorMessage("Failed to save document before ts format.");
+
+                throw "Failed to save document when it has unsaved edits.";
+
                 return;
-            };
-            
-            vscode.window.showErrorMessage("Failed to format document. See output window for details.");
-        });
+            }
 
-        exec.stderr.on("data", (data: string) => {
-            channel.append(data);
-        });
+            let projectPath = vscode.workspace.rootPath;
+            let content = editor.document.getText();
+            let defaults: tsfmt.Options =
+                {
+                    dryRun: false,
+                    verbose: true,
+                    baseDir: projectPath,
+                    replace: false,
+                    verify: false,
+                    tsconfig: false,
+                    tslint: false,
+                    editorconfig: false,
+                    tsfmt: true
+                };
 
-        exec.stdout.on("data", (data: string) => {
-            channel.append(data);
-        });
+            return tsfmt.processString(filename, content, defaults);
+        };
 
-        channel.show(vscode.ViewColumn.Three);
+        const getResult = (result: tsfmt.Result) => 
+        {
+            let resultMap: tsfmt.ResultMap = {};
+
+            resultMap[result.fileName] = result;
+
+            return resultMap;
+        };
+
+        const completeFormat = (resultMap: tsfmt.ResultMap) => 
+        {
+            const edit = resultMap[filename];
+            let error = edit.error;
+
+            if (error) 
+            {
+                throw "TSFMT failed to format file.";
+
+                return;
+            }
+
+            const formattedFile = resultMap[filename].message;
+
+            return editor.edit((editBuilder) => 
+            {
+                let lastLine = editor.document.lineAt(editor.document.lineCount - 1);
+                let range = new vscode.Range(0, 0, lastLine.range.end.line, lastLine.range.end.character);
+
+                editBuilder.replace(range, formattedFile);
+            });
+        };
+
+        const handleError = (error: any) => 
+        {
+            if (error instanceof Error)
+            {
+                console.error(error.stack);
+            }
+            else
+            {
+                console.error(error);
+            }
+
+            vscode.window.showErrorMessage("Failed to format document. Error: ", error);
+
+            return;
+        };
+        
+        //Save, find config file, create options and format.
+        Bluebird.resolve(editor.document.save())
+            .then(format)
+            .then(getResult)
+            .then(completeFormat)
+            .catch(handleError);
     });
 
     context.subscriptions.push(disposable);
 }
 
 // this method is called when your extension is deactivated
-export function deactivate() {
+export function deactivate()
+{
 }
